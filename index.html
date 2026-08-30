@@ -10,6 +10,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <style>
 /* ============================================================
    TOKENS — paleta "vale de compra" (papel de tienda + tinta)
@@ -400,6 +401,7 @@ input,select,textarea{font-family:inherit;}
   <div class="actionsheet-item" onclick="closeSheet('sheet-fab'); openAddInventoryItem();"><div class="ico">🧺</div>Añadir producto a casa</div>
   <div class="actionsheet-item" onclick="closeSheet('sheet-fab'); openRegistrarConsumo();"><div class="ico">➖</div>Registrar consumo</div>
   <div class="actionsheet-item" onclick="closeSheet('sheet-fab'); openQuickPurchase();"><div class="ico">⚡</div>Compra rápida / gasto</div>
+  <div class="actionsheet-item" onclick="closeSheet('sheet-fab'); openScanProduct();"><div class="ico">📷</div>Escanear producto (foto)</div>
 </div>
 
 <!-- ===================== SHEET: AÑADIR A LISTA ===================== -->
@@ -489,6 +491,29 @@ input,select,textarea{font-family:inherit;}
   <div class="field"><label>Total</label><input id="qp-total" type="number" step="0.01" placeholder="0,00 €"></div>
   <div class="field"><label>Nota (opcional)</label><input id="qp-note" placeholder="Ej. pan y leche"></div>
   <button class="btn" onclick="saveQuickPurchase()">Guardar gasto</button>
+</div>
+
+<!-- ===================== SHEET: ESCANEAR PRODUCTO (OCR) ===================== -->
+<div class="sheet" id="sheet-scan">
+  <div class="sheet-handle"></div>
+  <h2>Escanear producto</h2>
+  <div class="small-note" style="margin-bottom:10px;">Haz una foto de la etiqueta o el envase. La app leerá el texto y tú eliges cuál es el nombre del producto.</div>
+  <div id="scan-camera-wrap">
+    <input type="file" id="scan-file" accept="image/*" capture="environment" style="display:none" onchange="handleScanFile(event)">
+    <button class="btn" onclick="document.getElementById('scan-file').click()">📷 Tomar foto</button>
+  </div>
+  <div id="scan-preview" style="margin-top:12px;"></div>
+  <div id="scan-progress" class="small-note" style="margin-top:8px;"></div>
+  <div id="scan-results" style="margin-top:10px;"></div>
+  <div class="field" id="scan-name-field" style="display:none; margin-top:10px;">
+    <label>Nombre del producto</label>
+    <input id="scan-name" placeholder="Edita si hace falta">
+  </div>
+  <div id="scan-actions" style="display:none; gap:8px; margin-top:10px;">
+    <button class="btn secondary" onclick="scanGoTo('lista')">Añadir a la lista</button>
+    <button class="btn" onclick="scanGoTo('casa')">Añadir a casa</button>
+  </div>
+  <button class="btn ghost" onclick="resetScan()">Repetir foto</button>
 </div>
 
 <!-- ===================== SHEET: MODO COMPRA ===================== -->
@@ -1035,9 +1060,9 @@ async function setEstadoValue(id, val){
   await put('inventory',item);
   renderCasa(); renderInicio();
 }
-async function openAddInventoryItem(){
+async function openAddInventoryItem(prefillName){
   fillCategorySelect(document.getElementById('ai-cat'));
-  document.getElementById('ai-name').value='';
+  document.getElementById('ai-name').value=prefillName||'';
   document.getElementById('ai-qty').value=1;
   document.getElementById('ai-unit').value='ud';
   document.getElementById('ai-min').value=1;
@@ -1208,6 +1233,66 @@ async function saveQuickPurchase(){
   closeSheet('sheet-quick'); toast('Gasto guardado'); renderInicio(); renderHistorial();
 }
 
+/* ---- escanear producto (OCR en el navegador con Tesseract.js) ---- */
+function openScanProduct(){ resetScan(); openSheet('sheet-scan'); }
+function resetScan(){
+  document.getElementById('scan-file').value='';
+  document.getElementById('scan-preview').innerHTML='';
+  document.getElementById('scan-progress').textContent='';
+  document.getElementById('scan-results').innerHTML='';
+  document.getElementById('scan-name-field').style.display='none';
+  document.getElementById('scan-actions').style.display='none';
+  document.getElementById('scan-name').value='';
+}
+async function handleScanFile(ev){
+  const file=ev.target.files[0]; if(!file) return;
+  const url=URL.createObjectURL(file);
+  document.getElementById('scan-preview').innerHTML=`<img src="${url}" style="width:100%; border-radius:12px; max-height:220px; object-fit:cover;">`;
+  document.getElementById('scan-results').innerHTML='';
+  document.getElementById('scan-name-field').style.display='none';
+  document.getElementById('scan-actions').style.display='none';
+  const progressEl=document.getElementById('scan-progress');
+  progressEl.textContent='Analizando la foto… (la primera vez puede tardar un poco, descarga el paquete de idioma)';
+  try{
+    const {data}=await Tesseract.recognize(file, 'spa', {
+      logger: m=>{
+        if(m.status==='recognizing text') progressEl.textContent='Leyendo texto… '+Math.round((m.progress||0)*100)+'%';
+        else if(m.status) progressEl.textContent=m.status+'…';
+      }
+    });
+    progressEl.textContent='Listo. Toca la línea que sea el nombre del producto:';
+    const lines=(data.text||'').split('\n')
+      .map(l=>l.trim())
+      .filter(l=>l.length>=3 && !/^\d+([.,]\d+)?\s*(g|kg|ml|l|cl|%)?$/i.test(l) && !/^\d{6,}$/.test(l))
+      .filter((l,i,arr)=>arr.indexOf(l)===i)
+      .slice(0,10);
+    const cont=document.getElementById('scan-results');
+    if(lines.length===0){
+      cont.innerHTML='<div class="small-note">No se ha reconocido texto claro. Escribe el nombre a mano.</div>';
+    } else {
+      cont.innerHTML='<div class="choice-group" id="scan-chips">'+lines.map(l=>`<div class="choice" data-v="${l.replace(/"/g,'&quot;')}">${l}</div>`).join('')+'</div>';
+      document.querySelectorAll('#scan-chips .choice').forEach(c=>c.onclick=()=>{
+        document.querySelectorAll('#scan-chips .choice').forEach(x=>x.classList.remove('sel'));
+        c.classList.add('sel');
+        document.getElementById('scan-name').value=c.dataset.v;
+      });
+    }
+    document.getElementById('scan-name-field').style.display='block';
+    document.getElementById('scan-actions').style.display='flex';
+  }catch(e){
+    console.error(e);
+    progressEl.textContent='No se pudo leer la imagen. Puedes escribir el nombre a mano.';
+    document.getElementById('scan-name-field').style.display='block';
+    document.getElementById('scan-actions').style.display='flex';
+  }
+}
+function scanGoTo(dest){
+  const name=document.getElementById('scan-name').value.trim();
+  if(!name){ toast('Escribe o elige un nombre de producto'); return; }
+  closeSheet('sheet-scan');
+  if(dest==='lista') openAddListItem(name); else openAddInventoryItem(name);
+}
+
 /* ---- modo compra ---- */
 let mcBudget=0, mcSpent=0;
 async function openModoCompra(){
@@ -1336,8 +1421,18 @@ async function rowHistorial(p){
       <div><div style="font-weight:700;">${p.store}</div><div class="small-note">${fmtDate(p.date)} · ${personName(p.person)}</div></div>
       <div class="ticket-value" style="font-size:18px;">${euro(p.total)}</div>
     </div>
-    <div class="expand-body">${itemsHtml || '<div class="small-note">Sin detalle de productos (gasto rápido).</div>'}${p.note?'<div class="small-note">Nota: '+p.note+'</div>':''}</div>`;
+    <div class="expand-body">${itemsHtml || '<div class="small-note">Sin detalle de productos (gasto rápido).</div>'}${p.note?'<div class="small-note">Nota: '+p.note+'</div>':''}
+      <button class="btn danger" style="margin-top:10px;" onclick="event.stopPropagation(); deletePurchase('${p.id}')">🗑️ Eliminar esta compra</button>
+    </div>`;
   return wrap;
+}
+async function deletePurchase(purchaseId){
+  if(!confirm('¿Eliminar esta compra? Se borrará del histórico y del gasto del mes. El inventario no se tocará automáticamente (ajústalo a mano si hace falta).')) return;
+  const items=await getAllByIndex('purchase_items','purchaseId',purchaseId);
+  for(const it of items) await del('purchase_items', it.id);
+  await del('purchases', purchaseId);
+  toast('Compra eliminada');
+  renderInicio(); renderHistorial();
 }
 function getAllByIndex(store, index, key){
   if(syncEnabled) return Promise.resolve((cloudCache[store]||[]).filter(x=>x[index]===key));
