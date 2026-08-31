@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Panel del responsable · Partes de obra</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<style>
+/* ============================================================
+   TOKENS — identidad "plano técnico" (proyecto eléctrico/obra civil)
+   ============================================================ */
+:root{
+  --bg:#0F1B2D;
+  --surface:#16263D;
+  --surface2:#1C304A;
+  --ink:#E8EEF5;
+  --ink-soft:#8FA3BD;
+  --line:#2A3D57;
+  --accent:#4FA3D1;
+  --accent-soft:#1C3A4D;
+  --amber:#E8A33D;
+  --amber-soft:#3A2E17;
+  --red:#E36B5C;
+  --red-soft:#3A2020;
+  --green:#5FBF8B;
+  --green-soft:#193A2C;
+  --radius:12px;
+  --font-display:'Space Grotesk', sans-serif;
+  --font-body:'Inter', sans-serif;
+  --font-mono:'IBM Plex Mono', monospace;
+}
+*{box-sizing:border-box;}
+body{margin:0; background:var(--bg); color:var(--ink); font-family:var(--font-body); min-height:100vh;}
+h1,h2,h3{font-family:var(--font-display); margin:0; letter-spacing:-0.01em;}
+.mono{font-family:var(--font-mono);}
+a{color:var(--accent);}
+.bp-grid{
+  background-image:
+    linear-gradient(var(--line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line) 1px, transparent 1px);
+  background-size:36px 36px;
+  background-position:-1px -1px;
+}
+
+/* ---------- login ---------- */
+#loginScreen{min-height:100vh; display:none; align-items:center; justify-content:center; padding:20px;}
+.login-card{
+  background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
+  padding:36px 32px; max-width:380px; width:100%; box-shadow:0 12px 40px rgba(0,0,0,.35);
+}
+.login-card .eyebrow{color:var(--accent); font-family:var(--font-mono); font-size:12px; letter-spacing:.08em; margin-bottom:6px;}
+.login-card h1{font-size:24px; margin-bottom:6px;}
+.login-card p.sub{color:var(--ink-soft); font-size:13.5px; margin:0 0 26px;}
+.field{margin-bottom:14px;}
+.field label{display:block; font-size:12.5px; color:var(--ink-soft); margin-bottom:6px; font-weight:600;}
+.field input, .field select, .field textarea{
+  width:100%; padding:11px 13px; border-radius:8px; border:1px solid var(--line);
+  background:var(--bg); color:var(--ink); font-size:14.5px;
+}
+.field input:focus, .field select:focus{outline:2px solid var(--accent); outline-offset:1px;}
+.btn{
+  padding:12px 18px; border-radius:8px; border:none; background:var(--accent); color:#08161f;
+  font-weight:700; font-size:14.5px; cursor:pointer;
+}
+.btn.block{width:100%;}
+.btn.secondary{background:transparent; color:var(--accent); border:1px solid var(--accent);}
+.btn.ghost{background:none; color:var(--ink-soft); font-weight:600; text-decoration:underline; padding:8px;}
+.btn.danger{background:var(--red); color:#2a0d0a;}
+.btn.success{background:var(--green); color:#08201a;}
+.btn.small{padding:8px 12px; font-size:13px;}
+.toggle-row{display:flex; justify-content:space-between; margin-top:16px; font-size:13px; color:var(--ink-soft);}
+.toggle-row a{cursor:pointer;}
+.error-msg{background:var(--red-soft); color:var(--red); padding:10px 12px; border-radius:8px; font-size:13px; margin-bottom:14px; display:none;}
+
+/* ---------- app shell ---------- */
+#appScreen{display:none; min-height:100vh;}
+header.topbar{
+  border-bottom:1px solid var(--line); padding:14px 26px; display:flex; align-items:center; justify-content:space-between;
+  position:sticky; top:0; background:rgba(15,27,45,.94); backdrop-filter:blur(6px); z-index:20; flex-wrap:wrap; gap:10px;
+}
+header.topbar .brand{display:flex; align-items:center; gap:12px;}
+header.topbar .brand .mark{
+  width:36px;height:36px;border-radius:8px;background:var(--accent-soft); color:var(--accent);
+  display:flex;align-items:center;justify-content:center; font-family:var(--font-display); font-weight:700; font-size:15px;
+}
+header.topbar h1{font-size:16px;}
+header.topbar .company{color:var(--ink-soft); font-size:12.5px; font-family:var(--font-mono);}
+header.topbar .right{display:flex; align-items:center; gap:14px; font-size:13px; color:var(--ink-soft);}
+.tabbar{display:flex; gap:4px; padding:0 26px; border-bottom:1px solid var(--line); overflow-x:auto;}
+.tabbar button{
+  background:none; border:none; color:var(--ink-soft); font-weight:600; font-size:13.5px; padding:13px 16px;
+  cursor:pointer; border-bottom:2px solid transparent; white-space:nowrap;
+}
+.tabbar button.active{color:var(--accent); border-bottom-color:var(--accent);}
+main{max-width:1100px; margin:0 auto; padding:24px 26px 60px;}
+.tabpanel{display:none;}
+.tabpanel.active{display:block;}
+
+.filters{display:flex; gap:10px; flex-wrap:wrap; margin-bottom:20px; align-items:flex-end;}
+.filters .field{margin-bottom:0; min-width:150px; flex:1;}
+.filters select, .filters input{
+  width:100%; padding:9px 11px; border-radius:8px; border:1px solid var(--line); background:var(--surface); color:var(--ink); font-size:13.5px;
+}
+
+.stats-row{display:grid; grid-template-columns:repeat(auto-fit, minmax(140px,1fr)); gap:12px; margin-bottom:24px;}
+.stat{background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:14px 16px;}
+.stat .lbl{font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-soft);}
+.stat .val{font-family:var(--font-mono); font-size:22px; font-weight:600; margin-top:4px;}
+.stat.warn .val{color:var(--amber);}
+.stat.bad .val{color:var(--red);}
+
+.report-list, .plain-list{display:flex; flex-direction:column; gap:10px;}
+.report-card{
+  background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
+  padding:16px 18px; cursor:pointer; transition:border-color .15s ease;
+  display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap;
+}
+.report-card:hover{border-color:var(--accent);}
+.tag{font-family:var(--font-mono); font-size:11px; padding:3px 8px; border-radius:5px; display:inline-block; margin-right:6px; margin-bottom:4px;}
+.tag.num{background:var(--accent-soft); color:var(--accent);}
+.tag.enviado{background:var(--amber-soft); color:var(--amber);}
+.tag.revisado{background:var(--accent-soft); color:var(--accent);}
+.tag.validado{background:var(--green-soft); color:var(--green);}
+.tag.rechazado{background:var(--red-soft); color:var(--red);}
+.report-card .title{font-weight:600; font-size:15px; margin-top:4px;}
+.report-card .meta{color:var(--ink-soft); font-size:12.5px; margin-top:3px;}
+.report-card .right-col{text-align:right; flex-shrink:0;}
+.report-card .date{font-family:var(--font-mono); font-size:12.5px; color:var(--ink-soft);}
+.report-card .photos-count{font-size:12px; color:var(--accent); margin-top:4px;}
+.empty-state{text-align:center; padding:50px 20px; color:var(--ink-soft);}
+.empty-state .big{font-size:36px; margin-bottom:10px;}
+
+.card-row{
+  background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
+  padding:14px 18px; display:flex; justify-content:space-between; align-items:center; gap:14px; flex-wrap:wrap;
+}
+.card-row .name{font-weight:600; font-size:14.5px;}
+.card-row .meta{color:var(--ink-soft); font-size:12.5px; margin-top:2px;}
+.status-pill{font-size:11px; padding:3px 9px; border-radius:20px; font-weight:600;}
+.status-pill.activa, .status-pill.active-yes{background:var(--green-soft); color:var(--green);}
+.status-pill.inactive, .status-pill.active-no, .status-pill.archivada{background:var(--red-soft); color:var(--red);}
+.status-pill.pendiente, .status-pill.en_curso{background:var(--amber-soft); color:var(--amber);}
+.status-pill.completado, .status-pill.finalizada{background:var(--green-soft); color:var(--green);}
+
+.panel-toolbar{display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:10px;}
+
+/* ---------- overlays / modales ---------- */
+.overlay{position:fixed; inset:0; background:rgba(6,12,20,.7); z-index:50; display:none; align-items:flex-start; justify-content:center; padding:30px 16px; overflow-y:auto;}
+.overlay.open{display:flex;}
+.panel-box{background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); max-width:560px; width:100%; padding:26px 28px 30px; margin-bottom:40px;}
+.panel-box.wide{max-width:780px;}
+.panel-box .close-x{float:right; background:none; border:none; color:var(--ink-soft); font-size:22px; cursor:pointer;}
+.panel-box h2{font-size:19px; margin-bottom:18px;}
+.detail-section{margin-bottom:20px; padding-bottom:18px; border-bottom:1px solid var(--line);}
+.detail-section:last-child{border-bottom:none;}
+.detail-section h3{font-size:13px; text-transform:uppercase; letter-spacing:.05em; color:var(--accent); margin-bottom:10px;}
+.kv-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px 20px; font-size:13.5px;}
+.kv-grid .k{color:var(--ink-soft); font-size:11.5px; text-transform:uppercase; letter-spacing:.03em;}
+.kv-grid .v{margin-top:2px;}
+table.mini{width:100%; border-collapse:collapse; font-size:13px; margin-top:6px;}
+table.mini th{text-align:left; color:var(--ink-soft); font-weight:600; font-size:11px; text-transform:uppercase; padding:6px 8px; border-bottom:1px solid var(--line);}
+table.mini td{padding:7px 8px; border-bottom:1px solid var(--line);}
+.photo-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); gap:10px; margin-top:8px;}
+.photo-grid figure{margin:0; background:var(--bg); border-radius:8px; overflow:hidden; border:1px solid var(--line);}
+.photo-grid img{width:100%; height:110px; object-fit:cover; display:block; cursor:zoom-in;}
+.photo-grid figcaption{padding:6px 8px; font-size:11px; color:var(--ink-soft);}
+.doc-link{display:block; padding:8px 10px; background:var(--bg); border:1px solid var(--line); border-radius:8px; margin-bottom:6px; font-size:13px; text-decoration:none;}
+#lightbox{position:fixed; inset:0; background:rgba(0,0,0,.9); display:none; align-items:center; justify-content:center; z-index:80; padding:20px;}
+#lightbox.open{display:flex;}
+#lightbox img{max-width:100%; max-height:90vh; border-radius:6px;}
+.review-actions{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;}
+.incidencia-box{background:var(--red-soft); color:var(--red); padding:12px 14px; border-radius:8px; font-size:13.5px;}
+@media print{
+  header.topbar, .tabbar, .filters, .stats-row, .report-list, .panel-toolbar, #loginScreen{display:none !important;}
+  .overlay{position:static; background:none; padding:0;}
+  .panel-box{border:none; box-shadow:none; max-width:100%;}
+  body{background:#fff; color:#111;}
+}
+</style>
+</head>
+<body class="bp-grid">
+
+<!-- ===================== CONFIGURACIÓN INICIAL DE FIREBASE ===================== -->
+<div id="fbConfigScreen" style="min-height:100vh; display:none; align-items:center; justify-content:center; padding:20px;">
+  <div class="login-card">
+    <div class="eyebrow">CONFIGURACIÓN INICIAL</div>
+    <h1>Conectar con el proyecto</h1>
+    <p class="sub">Pega la configuración de Firebase de este proyecto. Solo hace falta una vez en este navegador.</p>
+    <div class="error-msg" id="fbConfigError"></div>
+    <div class="field"><label>Configuración de Firebase (firebaseConfig)</label><textarea id="fbConfigInput" rows="6" placeholder='{"apiKey":"...","authDomain":"...","projectId":"..."}' style="width:100%; padding:11px 13px; border-radius:8px; border:1px solid var(--line); background:var(--bg); color:var(--ink); font-size:13.5px; font-family:var(--font-mono);"></textarea></div>
+    <button class="btn block" id="saveFbConfigBtn">Guardar y continuar</button>
+  </div>
+</div>
+
+<!-- ===================== LOGIN ===================== -->
+<div id="loginScreen">
+  <div class="login-card">
+    <div class="eyebrow">PANEL · RESPONSABLE DE OBRA</div>
+    <h1 id="loginTitle">Acceso</h1>
+    <p class="sub" id="loginSub">Consulta y gestiona los partes de tu equipo de campo.</p>
+    <div class="error-msg" id="loginError"></div>
+    <div class="field"><label>Correo electrónico</label><input type="email" id="loginEmail" autocomplete="username"></div>
+    <div class="field"><label>Contraseña</label><input type="password" id="loginPassword" autocomplete="current-password"></div>
+    <div class="field" id="companyCodeField" style="display:none;">
+      <label>Código de empresa</label>
+      <input type="text" id="loginCompanyCode" placeholder="Ej. griddex2026">
+    </div>
+    <button class="btn block" id="loginBtn">Entrar</button>
+    <div class="toggle-row">
+      <span id="toggleModeText">¿Primera vez?</span>
+      <a id="toggleModeLink">Crear cuenta de responsable</a>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== APP ===================== -->
+<div id="appScreen">
+  <header class="topbar">
+    <div class="brand">
+      <div class="mark">PB</div>
+      <div><h1>Partes de obra</h1><div class="company" id="companyLabel">—</div></div>
+    </div>
+    <div class="right">
+      <span id="userEmailLabel"></span>
+      <button class="btn ghost" id="firebaseCfgBtn" style="width:auto;">⚙ Firebase</button>
+      <button class="btn ghost" id="logoutBtn" style="width:auto;">Salir</button>
+    </div>
+  </header>
+  <nav class="tabbar">
+    <button data-tab="partes" class="active">Partes</button>
+    <button data-tab="trabajadores">Trabajadores</button>
+    <button data-tab="obras">Obras</button>
+    <button data-tab="asignaciones">Asignaciones</button>
+  </nav>
+  <main>
+
+    <!-- ===== TAB: PARTES ===== -->
+    <div class="tabpanel active" id="tab-partes">
+      <div class="stats-row" id="statsRow"></div>
+      <div class="filters">
+        <div class="field"><label>Trabajador</label><select id="fTrabajador"><option value="">Todos</option></select></div>
+        <div class="field"><label>Obra</label><select id="fObra"><option value="">Todas</option></select></div>
+        <div class="field"><label>Estado revisión</label><select id="fEstadoRev">
+          <option value="">Todos</option><option value="enviado">Enviado</option><option value="revisado">Revisado</option>
+          <option value="validado">Validado</option><option value="rechazado">Rechazado</option>
+        </select></div>
+        <div class="field"><label>Desde</label><input type="date" id="fDesde"></div>
+        <div class="field"><label>Hasta</label><input type="date" id="fHasta"></div>
+      </div>
+      <div class="report-list" id="reportList"></div>
+    </div>
+
+    <!-- ===== TAB: TRABAJADORES ===== -->
+    <div class="tabpanel" id="tab-trabajadores">
+      <div class="panel-toolbar"><h2 style="font-size:17px;">Trabajadores</h2><button class="btn small" id="newWorkerBtn">+ Nuevo trabajador</button></div>
+      <div class="plain-list" id="workersList"></div>
+    </div>
+
+    <!-- ===== TAB: OBRAS ===== -->
+    <div class="tabpanel" id="tab-obras">
+      <div class="panel-toolbar"><h2 style="font-size:17px;">Obras</h2><button class="btn small" id="newProjectBtn">+ Nueva obra</button></div>
+      <div class="plain-list" id="projectsList"></div>
+    </div>
+
+    <!-- ===== TAB: ASIGNACIONES ===== -->
+    <div class="tabpanel" id="tab-asignaciones">
+      <div class="panel-toolbar"><h2 style="font-size:17px;">Asignaciones de trabajo</h2><button class="btn small" id="newAssignmentBtn">+ Nueva asignación</button></div>
+      <div class="plain-list" id="assignmentsList"></div>
+    </div>
+
+  </main>
+</div>
+
+<!-- ===================== DETALLE DE PARTE ===================== -->
+<div class="overlay" id="detailOverlay"><div class="panel-box wide" id="detailPanel"></div></div>
+<div id="lightbox" onclick="this.classList.remove('open')"><img id="lightboxImg"></div>
+
+<!-- ===================== MODAL: NUEVO TRABAJADOR ===================== -->
+<div class="overlay" id="workerOverlay">
+  <div class="panel-box">
+    <button class="close-x" onclick="closeOverlay('workerOverlay')">✕</button>
+    <h2>Nuevo trabajador</h2>
+    <div class="error-msg" id="workerError"></div>
+    <div class="field"><label>Nombre completo</label><input type="text" id="w_name"></div>
+    <div class="field"><label>Código de trabajador (corto, ej. 07)</label><input type="text" id="w_code"></div>
+    <div class="field"><label>PIN (mínimo 6 dígitos)</label><input type="text" id="w_pin" inputmode="numeric"></div>
+    <button class="btn block" id="saveWorkerBtn">Crear trabajador</button>
+  </div>
+</div>
+
+<!-- ===================== MODAL: NUEVA/EDITAR OBRA ===================== -->
+<div class="overlay" id="projectOverlay">
+  <div class="panel-box">
+    <button class="close-x" onclick="closeOverlay('projectOverlay')">✕</button>
+    <h2 id="projectModalTitle">Nueva obra</h2>
+    <div class="field"><label>Nombre de la obra</label><input type="text" id="p_nombre"></div>
+    <div class="field"><label>Código</label><input type="text" id="p_codigo"></div>
+    <div class="field"><label>Cliente</label><input type="text" id="p_cliente"></div>
+    <div class="field"><label>Dirección</label><input type="text" id="p_direccion"></div>
+    <div class="field"><label>Expediente</label><input type="text" id="p_expediente"></div>
+    <div class="field"><label>Pedido</label><input type="text" id="p_pedido"></div>
+    <div class="field"><label>Estado</label><select id="p_estado">
+      <option value="activa">Activa</option><option value="finalizada">Finalizada</option>
+      <option value="suspendida">Suspendida</option><option value="archivada">Archivada</option>
+    </select></div>
+    <button class="btn block" id="saveProjectBtn">Guardar obra</button>
+  </div>
+</div>
+
+<!-- ===================== MODAL: NUEVA ASIGNACIÓN ===================== -->
+<div class="overlay" id="assignmentOverlay">
+  <div class="panel-box">
+    <button class="close-x" onclick="closeOverlay('assignmentOverlay')">✕</button>
+    <h2>Nueva asignación</h2>
+    <div class="field"><label>Trabajador</label><select id="a_worker"></select></div>
+    <div class="field"><label>Obra</label><select id="a_project"></select></div>
+    <div class="field"><label>Descripción prevista</label><textarea id="a_desc" rows="3"></textarea></div>
+    <div class="field"><label>Fecha prevista</label><input type="date" id="a_fecha"></div>
+    <button class="btn block" id="saveAssignmentBtn">Crear asignación</button>
+  </div>
+</div>
+
+<script>
+/* ================================================================
+   CONFIGURACIÓN DE FIREBASE
+   ================================================================ */
+function getFbConfig(){ try{ return JSON.parse(localStorage.getItem('idoFirebaseConfig')||'null'); }catch(e){ return null; } }
+let fbApp, fbAuth, fbDb, currentCompanyCode=null, currentReports=[], currentWorkers=[], currentProjects=[], currentAssignments=[];
+
+function startFirebase(){
+  const cfg = getFbConfig();
+  if(!cfg) return false;
+  fbApp = firebase.apps.length ? firebase.app() : firebase.initializeApp(cfg);
+  fbAuth = firebase.auth();
+  fbDb = firebase.firestore();
+  return true;
+}
+document.getElementById('firebaseCfgBtn').onclick = () => { localStorage.removeItem('idoFirebaseConfig'); location.reload(); };
+document.getElementById('saveFbConfigBtn').onclick = () => {
+  const raw = document.getElementById('fbConfigInput').value.trim();
+  const errEl = document.getElementById('fbConfigError'); errEl.style.display='none';
+  if(!raw){ errEl.textContent='Pega la configuración antes de continuar.'; errEl.style.display='block'; return; }
+  try{
+    JSON.parse(raw);
+    localStorage.setItem('idoFirebaseConfig', raw);
+    if(startFirebase()){
+      document.getElementById('fbConfigScreen').style.display='none';
+      document.getElementById('loginScreen').style.display='flex';
+      setupAuthListener();
+    }
+  }catch(e){
+    errEl.textContent='Ese texto no es un JSON válido. Copia el bloque firebaseConfig completo, con las llaves { }.';
+    errEl.style.display='block';
+  }
+};
+
+/* ================================================================
+   LOGIN / REGISTRO
+   ================================================================ */
+let mode='login';
+document.getElementById('toggleModeLink').onclick = () => {
+  mode = mode==='login' ? 'signup' : 'login';
+  document.getElementById('toggleModeText').textContent = mode==='login' ? '¿Primera vez?' : '¿Ya tienes cuenta?';
+  document.getElementById('toggleModeLink').textContent = mode==='login' ? 'Crear cuenta de responsable' : 'Iniciar sesión';
+  document.getElementById('loginTitle').textContent = mode==='login' ? 'Acceso' : 'Crear cuenta';
+  document.getElementById('companyCodeField').style.display = mode==='signup' ? 'block' : 'none';
+};
+document.getElementById('loginBtn').onclick = async () => {
+  if(!fbAuth){ if(!initFirebase()) return; }
+  const email = document.getElementById('loginEmail').value.trim();
+  const pass = document.getElementById('loginPassword').value;
+  const errEl = document.getElementById('loginError'); errEl.style.display='none';
+  if(!email || !pass){ showLoginError('Rellena correo y contraseña'); return; }
+  try{
+    if(mode==='signup'){
+      const code = document.getElementById('loginCompanyCode').value.trim();
+      if(!code){ showLoginError('Indica el código de empresa'); return; }
+      const cred = await fbAuth.createUserWithEmailAndPassword(email, pass);
+      await fbDb.collection('adminUsers').doc(cred.user.uid).set({companyCode:code, email, createdAt:new Date().toISOString()});
+    } else {
+      await fbAuth.signInWithEmailAndPassword(email, pass);
+    }
+  }catch(e){ showLoginError(traduceError(e)); }
+};
+function showLoginError(msg){ const e=document.getElementById('loginError'); e.textContent=msg; e.style.display='block'; }
+function traduceError(e){
+  const c = e.code||'';
+  if(c.includes('wrong-password') || c.includes('invalid-credential')) return 'Correo o contraseña incorrectos.';
+  if(c.includes('user-not-found')) return 'No existe ninguna cuenta con ese correo.';
+  if(c.includes('email-already-in-use')) return 'Ya existe una cuenta con ese correo.';
+  if(c.includes('weak-password')) return 'La contraseña debe tener al menos 6 caracteres.';
+  return e.message || 'Ha ocurrido un error.';
+}
+document.getElementById('logoutBtn').onclick = () => fbAuth.signOut();
+
+async function onAuthed(user){
+  document.getElementById('loginScreen').style.display='none';
+  document.getElementById('appScreen').style.display='block';
+  document.getElementById('userEmailLabel').textContent = user.email;
+  const adminDoc = await fbDb.collection('adminUsers').doc(user.uid).get();
+  if(!adminDoc.exists){
+    alert('Tu cuenta no está asociada a ninguna empresa todavía. Contacta con quien te dio de alta.');
+    fbAuth.signOut();
+    return;
+  }
+  currentCompanyCode = adminDoc.data().companyCode;
+  document.getElementById('companyLabel').textContent = 'Empresa: '+currentCompanyCode;
+  await Promise.all([loadReports(), loadWorkers(), loadProjects(), loadAssignments()]);
+}
+
+/* ================================================================
+   NAVEGACIÓN DE PESTAÑAS
+   ================================================================ */
+document.querySelectorAll('.tabbar button').forEach(btn=>{
+  btn.onclick = () => {
+    document.querySelectorAll('.tabbar button').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.tabpanel').forEach(p=>p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-'+btn.dataset.tab).classList.add('active');
+  };
+});
+function escapeHtml(s){ return String(s||'').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function closeOverlay(id){ document.getElementById(id).classList.remove('open'); }
+
+/* ================================================================
+   PARTES
+   ================================================================ */
+async function loadReports(){
+  const snap = await fbDb.collection('companies').doc(currentCompanyCode).collection('reports').orderBy('submittedAt','desc').get();
+  currentReports = snap.docs.map(d=>Object.assign({id:d.id}, d.data()));
+  populateFilterOptions();
+  renderStats();
+  renderReportList();
+}
+function populateFilterOptions(){
+  const trabajadores = [...new Set(currentReports.map(r=>r.workerName||r.trabajador).filter(Boolean))].sort();
+  const obras = [...new Set(currentReports.map(r=>r.obraNombre || r.def_obra || r.num_obra).filter(Boolean))].sort();
+  const selT = document.getElementById('fTrabajador'), selO = document.getElementById('fObra');
+  const curT = selT.value, curO = selO.value;
+  selT.innerHTML = '<option value="">Todos</option>' + trabajadores.map(t=>`<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
+  selO.innerHTML = '<option value="">Todas</option>' + obras.map(o=>`<option value="${escapeHtml(o)}">${escapeHtml(o)}</option>`).join('');
+  selT.value = curT; selO.value = curO;
+}
+['fTrabajador','fObra','fEstadoRev','fDesde','fHasta'].forEach(id=>{
+  document.getElementById(id).addEventListener('change', renderReportList);
+});
+function getFilteredReports(){
+  const t = document.getElementById('fTrabajador').value;
+  const o = document.getElementById('fObra').value;
+  const er = document.getElementById('fEstadoRev').value;
+  const desde = document.getElementById('fDesde').value;
+  const hasta = document.getElementById('fHasta').value;
+  return currentReports.filter(r=>{
+    const nombreTrabajador = r.workerName||r.trabajador;
+    const nombreObra = r.obraNombre||r.def_obra||r.num_obra;
+    if(t && nombreTrabajador!==t) return false;
+    if(o && nombreObra!==o) return false;
+    if(er && (r.estadoRevision||'enviado')!==er) return false;
+    const fecha = r.fecha || (r.submittedAt||'').slice(0,10);
+    if(desde && fecha < desde) return false;
+    if(hasta && fecha > hasta) return false;
+    return true;
+  });
+}
+function renderStats(){
+  const list = getFilteredReports();
+  const cont = document.getElementById('statsRow');
+  const hoy = new Date().toISOString().slice(0,10);
+  const semanaInicio = new Date(); semanaInicio.setDate(semanaInicio.getDate()-7);
+  const partesHoy = currentReports.filter(r=>r.fecha===hoy).length;
+  const partesSemana = currentReports.filter(r=>r.fecha && new Date(r.fecha)>=semanaInicio).length;
+  const horasMes = currentReports.filter(r=>(r.fecha||'').slice(0,7)===hoy.slice(0,7)).reduce((s,r)=>s+(r.horasImputadas||0),0);
+  const obrasActivas = currentProjects.filter(p=>p.estado==='activa').length;
+  const trabajadoresActivos = currentWorkers.filter(w=>w.active!==false).length;
+  const pendientesRevisar = currentReports.filter(r=>(r.estadoRevision||'enviado')==='enviado').length;
+  const incidenciasAbiertas = currentReports.filter(r=>r.incidencia?.activa && (r.estadoRevision||'enviado')!=='validado').length;
+  cont.innerHTML = `
+    <div class="stat"><div class="lbl">Partes hoy</div><div class="val">${partesHoy}</div></div>
+    <div class="stat"><div class="lbl">Partes esta semana</div><div class="val">${partesSemana}</div></div>
+    <div class="stat"><div class="lbl">Horas este mes</div><div class="val">${horasMes.toFixed(1)}h</div></div>
+    <div class="stat"><div class="lbl">Obras activas</div><div class="val">${obrasActivas}</div></div>
+    <div class="stat"><div class="lbl">Trabajadores activos</div><div class="val">${trabajadoresActivos}</div></div>
+    <div class="stat ${pendientesRevisar>0?'warn':''}"><div class="lbl">Pendientes de revisar</div><div class="val">${pendientesRevisar}</div></div>
+    <div class="stat ${incidenciasAbiertas>0?'bad':''}"><div class="lbl">Incidencias abiertas</div><div class="val">${incidenciasAbiertas}</div></div>
+  `;
+}
+function renderReportList(){
+  renderStats();
+  const list = getFilteredReports();
+  const cont = document.getElementById('reportList'); cont.innerHTML='';
+  if(list.length===0){ cont.innerHTML='<div class="empty-state"><div class="big">📭</div>No hay partes que coincidan con los filtros.</div>'; return; }
+  list.forEach(r=>{
+    const card = document.createElement('div'); card.className='report-card';
+    const nombreObra = r.obraNombre || r.def_obra || r.num_obra || 'Obra sin nombre';
+    const nombreTrabajador = r.workerName || r.trabajador || 'Sin nombre';
+    const fecha = r.fecha ? new Date(r.fecha+'T00:00:00').toLocaleDateString('es-ES') : (r.submittedAt ? new Date(r.submittedAt).toLocaleDateString('es-ES') : '');
+    const estRev = r.estadoRevision || 'enviado';
+    card.innerHTML = `
+      <div>
+        <span class="tag num">${escapeHtml(r.numero||'—')}</span>
+        <span class="tag ${estRev}">${estRev.toUpperCase()}</span>
+        ${r.incidencia?.activa ? '<span class="tag rechazado">INCIDENCIA</span>' : ''}
+        <div class="title">${escapeHtml(nombreObra)}</div>
+        <div class="meta">${escapeHtml(nombreTrabajador)} ${r.horasImputadas?('· '+r.horasImputadas+'h'):''}</div>
+      </div>
+      <div class="right-col">
+        <div class="date mono">${fecha}</div>
+        <div class="photos-count">${(r.photos||[]).length} 📷</div>
+      </div>`;
+    card.onclick = () => openDetail(r);
+    cont.appendChild(card);
+  });
+}
+
+function tableSection(title, rows, cols, keys){
+  if(!rows || rows.length===0) return '';
+  return `<div class="detail-section"><h3>${title}</h3><table class="mini"><thead><tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead><tbody>
+    ${rows.map(r=>`<tr>${keys.map(k=>`<td>${escapeHtml(r[k]??'')}</td>`).join('')}</tr>`).join('')}
+  </tbody></table></div>`;
+}
+function openDetail(r){
+  const panel = document.getElementById('detailPanel');
+  const isNuevoFormato = !!r.numero;
+  let html = `<button class="close-x" onclick="closeOverlay('detailOverlay')">✕</button>`;
+
+  if(isNuevoFormato){
+    const fecha = r.fecha ? new Date(r.fecha+'T00:00:00').toLocaleDateString('es-ES') : '';
+    html += `<h2>${escapeHtml(r.numero)} · ${escapeHtml(r.obraNombre||'')}</h2>
+      <div class="sub" style="color:var(--ink-soft); margin-bottom:18px;">${escapeHtml(r.workerName||'')} · ${fecha}</div>
+      <div class="detail-section">
+        <h3>Datos generales</h3>
+        <div class="kv-grid">
+          <div><div class="k">Expediente</div><div class="v">${escapeHtml(r.expediente||'—')}</div></div>
+          <div><div class="k">Pedido</div><div class="v">${escapeHtml(r.pedido||'—')}</div></div>
+          <div><div class="k">Dirección</div><div class="v">${escapeHtml(r.direccion||'—')}</div></div>
+          <div><div class="k">Estado del trabajo</div><div class="v">${escapeHtml(r.estado||'—')}</div></div>
+        </div>
+      </div>
+      <div class="detail-section">
+        <h3>Horario</h3>
+        <div class="kv-grid">
+          <div><div class="k">Inicio</div><div class="v">${escapeHtml(r.horaInicio||'—')}</div></div>
+          <div><div class="k">Fin</div><div class="v">${escapeHtml(r.horaFin||'—')}</div></div>
+          <div><div class="k">Horas imputadas</div><div class="v">${r.horasImputadas||0} h</div></div>
+        </div>
+      </div>
+      <div class="detail-section"><h3>Trabajos realizados</h3><div>${escapeHtml(r.trabajosTexto||'—')}</div></div>`;
+    html += tableSection('Tabla de trabajos', r.tablaTrabajos, ['Descripción','Cantidad','Unidad'], ['desc','cantidad','unidad']);
+    html += tableSection('Materiales', r.materiales, ['Material','Cantidad','Unidad'], ['desc','cantidad','unidad']);
+    if(r.observaciones) html += `<div class="detail-section"><h3>Observaciones</h3><div>${escapeHtml(r.observaciones)}</div></div>`;
+    if(r.incidencia?.activa) html += `<div class="detail-section"><h3>Incidencia</h3><div class="incidencia-box">${escapeHtml(r.incidencia.descripcion||'(sin descripción)')}</div></div>`;
+    const docs = r.documents||[];
+    if(docs.length) html += `<div class="detail-section"><h3>Documentación adjunta</h3>${docs.map(d=>`<a class="doc-link" href="${d.url}" target="_blank">📄 ${escapeHtml(d.name)}</a>`).join('')}</div>`;
+    const photos = r.photos||[];
+    html += `<div class="detail-section"><h3>Fotos (${photos.length})</h3><div class="photo-grid">${photos.map(p=>`<figure><img src="${p.thumbUrl||p.url}" onclick="openLightbox('${p.url}')"><figcaption>${escapeHtml(p.caption||'')}</figcaption></figure>`).join('')}</div></div>`;
+    const estRev = r.estadoRevision||'enviado';
+    html += `<div class="detail-section"><h3>Revisión</h3>
+      <div class="kv-grid" style="margin-bottom:10px;">
+        <div><div class="k">Estado actual</div><div class="v"><span class="tag ${estRev}">${estRev.toUpperCase()}</span></div></div>
+        ${r.motivoRechazo?`<div><div class="k">Motivo de rechazo</div><div class="v">${escapeHtml(r.motivoRechazo)}</div></div>`:''}
+      </div>
+      <div class="review-actions">
+        <button class="btn secondary small" onclick="reviewReport('${r.id}','revisado')">Marcar revisado</button>
+        <button class="btn success small" onclick="reviewReport('${r.id}','validado')">Validar</button>
+        <button class="btn danger small" onclick="rejectReport('${r.id}')">Rechazar</button>
+        <button class="btn ghost small" onclick="window.print()">🖨 Imprimir</button>
+      </div>
+    </div>`;
+  } else {
+    // Formato antiguo (informe semanal de dirección de obra)
+    const fecha = r.submittedAt ? new Date(r.submittedAt).toLocaleString('es-ES') : '';
+    html += `<h2>${escapeHtml(r.def_obra || r.num_obra || 'Obra sin nombre')}</h2>
+      <div class="sub" style="color:var(--ink-soft); margin-bottom:18px;">${escapeHtml(r.trabajador||'')} · enviado el ${fecha}</div>`;
+    html += tableSection('Avances de obra', r.avances, ['Descripción','Estado'], ['0','1']);
+    html += tableSection('Personal y equipos', r.personal, ['Oficio/Equipo','Cantidad'], ['0','1']);
+    const photos = r.photos||[];
+    html += `<div class="detail-section"><h3>Fotos (${photos.length})</h3><div class="photo-grid">${photos.map(p=>`<figure><img src="${p.url}" onclick="openLightbox('${p.url}')"><figcaption>${escapeHtml(p.caption||p.name||'')}</figcaption></figure>`).join('')}</div></div>`;
+    html += `<button class="btn secondary" onclick="window.print()">🖨 Imprimir / guardar como PDF</button>`;
+  }
+  panel.innerHTML = html;
+  document.getElementById('detailOverlay').classList.add('open');
+}
+function openLightbox(url){ document.getElementById('lightboxImg').src=url; document.getElementById('lightbox').classList.add('open'); }
+
+async function reviewReport(reportId, nuevoEstado){
+  const update = {estadoRevision: nuevoEstado};
+  const now = new Date().toISOString();
+  if(nuevoEstado==='revisado'){ update.reviewedAt = now; update.reviewedBy = fbAuth.currentUser.uid; }
+  if(nuevoEstado==='validado'){ update.validatedAt = now; update.validatedBy = fbAuth.currentUser.uid; }
+  await fbDb.collection('companies').doc(currentCompanyCode).collection('reports').doc(reportId).update(update);
+  closeOverlay('detailOverlay');
+  await loadReports();
+}
+async function rejectReport(reportId){
+  const motivo = prompt('Motivo del rechazo (obligatorio):');
+  if(!motivo || !motivo.trim()){ alert('El motivo es obligatorio para rechazar un parte.'); return; }
+  await fbDb.collection('companies').doc(currentCompanyCode).collection('reports').doc(reportId).update({
+    estadoRevision:'rechazado', motivoRechazo: motivo.trim(), rejectedAt: new Date().toISOString()
+  });
+  closeOverlay('detailOverlay');
+  await loadReports();
+}
+
+/* ================================================================
+   TRABAJADORES (creación con instancia secundaria de Firebase,
+   para no cerrar la sesión del responsable)
+   ================================================================ */
+async function loadWorkers(){
+  const snap = await fbDb.collection('companies').doc(currentCompanyCode).collection('workers').get();
+  currentWorkers = snap.docs.map(d=>Object.assign({id:d.id}, d.data()));
+  renderWorkers();
+}
+function renderWorkers(){
+  const cont = document.getElementById('workersList'); cont.innerHTML='';
+  if(currentWorkers.length===0){ cont.innerHTML='<div class="empty-state"><div class="big">👷</div>Todavía no has creado ningún trabajador.</div>'; return; }
+  currentWorkers.forEach(w=>{
+    const row = document.createElement('div'); row.className='card-row';
+    row.innerHTML = `<div><div class="name">${escapeHtml(w.name)}</div><div class="meta">Código: ${escapeHtml(w.workerCode)}</div></div>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <span class="status-pill ${w.active!==false?'active-yes':'active-no'}">${w.active!==false?'ACTIVO':'INACTIVO'}</span>
+        <button class="btn ghost small" onclick="toggleWorkerActive('${w.id}', ${w.active!==false})">${w.active!==false?'Desactivar':'Activar'}</button>
+      </div>`;
+    cont.appendChild(row);
+  });
+}
+async function toggleWorkerActive(uid, isActive){
+  await fbDb.collection('companies').doc(currentCompanyCode).collection('workers').doc(uid).update({active: !isActive});
+  await loadWorkers();
+}
+document.getElementById('newWorkerBtn').onclick = () => {
+  document.getElementById('w_name').value=''; document.getElementById('w_code').value=''; document.getElementById('w_pin').value='';
+  document.getElementById('workerError').style.display='none';
+  document.getElementById('workerOverlay').classList.add('open');
+};
+function getSecondaryApp(){
+  let secApp = firebase.apps.find(a=>a.name==='Secondary');
+  if(!secApp) secApp = firebase.initializeApp(getFbConfig(), 'Secondary');
+  return secApp;
+}
+document.getElementById('saveWorkerBtn').onclick = async () => {
+  const name = document.getElementById('w_name').value.trim();
+  const code = document.getElementById('w_code').value.trim().toLowerCase();
+  const pin = document.getElementById('w_pin').value.trim();
+  const errEl = document.getElementById('workerError');
+  if(!name || !code || !pin){ errEl.textContent='Rellena todos los campos.'; errEl.style.display='block'; return; }
+  if(pin.length<6){ errEl.textContent='El PIN debe tener al menos 6 caracteres.'; errEl.style.display='block'; return; }
+  try{
+    const secApp = getSecondaryApp();
+    const secAuth = secApp.auth();
+    const email = 'w-'+code+'@'+currentCompanyCode.toLowerCase()+'.partes.local';
+    const cred = await secAuth.createUserWithEmailAndPassword(email, pin);
+    const uid = cred.user.uid;
+    await secAuth.signOut();
+    await fbDb.collection('companies').doc(currentCompanyCode).collection('workers').doc(uid).set({
+      name, workerCode: code, active: true, createdAt: new Date().toISOString()
+    });
+    closeOverlay('workerOverlay');
+    await loadWorkers();
+  }catch(e){
+    errEl.textContent = e.code==='auth/email-already-in-use' ? 'Ese código de trabajador ya está en uso.' : (e.message||'Error al crear el trabajador.');
+    errEl.style.display='block';
+  }
+};
+
+/* ================================================================
+   OBRAS
+   ================================================================ */
+async function loadProjects(){
+  const snap = await fbDb.collection('companies').doc(currentCompanyCode).collection('projects').get();
+  currentProjects = snap.docs.map(d=>Object.assign({id:d.id}, d.data()));
+  renderProjects();
+}
+function renderProjects(){
+  const cont = document.getElementById('projectsList'); cont.innerHTML='';
+  if(currentProjects.length===0){ cont.innerHTML='<div class="empty-state"><div class="big">🏗️</div>Todavía no has creado ninguna obra.</div>'; return; }
+  currentProjects.forEach(p=>{
+    const row = document.createElement('div'); row.className='card-row';
+    row.innerHTML = `<div><div class="name">${escapeHtml(p.nombre)}</div><div class="meta">${escapeHtml(p.cliente||'')} ${p.expediente?('· Exp. '+escapeHtml(p.expediente)):''}</div></div>
+      <span class="status-pill ${p.estado}">${(p.estado||'').toUpperCase()}</span>`;
+    cont.appendChild(row);
+  });
+}
+document.getElementById('newProjectBtn').onclick = () => {
+  ['p_nombre','p_codigo','p_cliente','p_direccion','p_expediente','p_pedido'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('p_estado').value='activa';
+  document.getElementById('projectModalTitle').textContent='Nueva obra';
+  document.getElementById('projectOverlay').classList.add('open');
+};
+document.getElementById('saveProjectBtn').onclick = async () => {
+  const nombre = document.getElementById('p_nombre').value.trim();
+  if(!nombre){ alert('Indica el nombre de la obra'); return; }
+  await fbDb.collection('companies').doc(currentCompanyCode).collection('projects').add({
+    nombre, codigo: document.getElementById('p_codigo').value.trim(),
+    cliente: document.getElementById('p_cliente').value.trim(),
+    direccion: document.getElementById('p_direccion').value.trim(),
+    expediente: document.getElementById('p_expediente').value.trim(),
+    pedido: document.getElementById('p_pedido').value.trim(),
+    estado: document.getElementById('p_estado').value,
+    createdAt: new Date().toISOString()
+  });
+  closeOverlay('projectOverlay');
+  await loadProjects();
+};
+
+/* ================================================================
+   ASIGNACIONES
+   ================================================================ */
+async function loadAssignments(){
+  const snap = await fbDb.collection('companies').doc(currentCompanyCode).collection('assignments').orderBy('fechaPrevista','desc').get();
+  currentAssignments = snap.docs.map(d=>Object.assign({id:d.id}, d.data()));
+  renderAssignments();
+}
+function renderAssignments(){
+  const cont = document.getElementById('assignmentsList'); cont.innerHTML='';
+  if(currentAssignments.length===0){ cont.innerHTML='<div class="empty-state"><div class="big">📋</div>Todavía no has creado ninguna asignación.</div>'; return; }
+  currentAssignments.forEach(a=>{
+    const worker = currentWorkers.find(w=>w.id===a.workerUid);
+    const project = currentProjects.find(p=>p.id===a.projectId);
+    const row = document.createElement('div'); row.className='card-row';
+    row.innerHTML = `<div><div class="name">${escapeHtml(project?project.nombre:'Obra')}</div><div class="meta">${escapeHtml(worker?worker.name:'—')} · ${escapeHtml(a.fechaPrevista||'')}</div></div>
+      <span class="status-pill ${a.estado}">${(a.estado||'').toUpperCase().replace('_',' ')}</span>`;
+    cont.appendChild(row);
+  });
+}
+document.getElementById('newAssignmentBtn').onclick = () => {
+  const selW = document.getElementById('a_worker'), selP = document.getElementById('a_project');
+  selW.innerHTML = currentWorkers.filter(w=>w.active!==false).map(w=>`<option value="${w.id}">${escapeHtml(w.name)}</option>`).join('');
+  selP.innerHTML = currentProjects.filter(p=>p.estado==='activa').map(p=>`<option value="${p.id}">${escapeHtml(p.nombre)}</option>`).join('');
+  document.getElementById('a_desc').value=''; document.getElementById('a_fecha').value=new Date().toISOString().slice(0,10);
+  document.getElementById('assignmentOverlay').classList.add('open');
+};
+document.getElementById('saveAssignmentBtn').onclick = async () => {
+  const workerUid = document.getElementById('a_worker').value;
+  const projectId = document.getElementById('a_project').value;
+  if(!workerUid || !projectId){ alert('Selecciona trabajador y obra (crea alguno primero si la lista está vacía).'); return; }
+  await fbDb.collection('companies').doc(currentCompanyCode).collection('assignments').add({
+    workerUid, projectId,
+    descripcionPrevista: document.getElementById('a_desc').value.trim(),
+    fechaPrevista: document.getElementById('a_fecha').value,
+    estado: 'pendiente',
+    createdBy: fbAuth.currentUser.uid,
+    createdAt: new Date().toISOString()
+  });
+  closeOverlay('assignmentOverlay');
+  await loadAssignments();
+};
+
+/* ================================================================
+   INIT
+   ================================================================ */
+function setupAuthListener(){
+  fbAuth.onAuthStateChanged(user=>{
+    if(user) onAuthed(user);
+    else { document.getElementById('loginScreen').style.display='flex'; document.getElementById('appScreen').style.display='none'; }
+  });
+}
+(function init(){
+  if(getFbConfig() && startFirebase()){
+    document.getElementById('loginScreen').style.display='flex';
+    setupAuthListener();
+  } else {
+    document.getElementById('fbConfigScreen').style.display='flex';
+  }
+})();
+</script>
+</body>
+</html>
